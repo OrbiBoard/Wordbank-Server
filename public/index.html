@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>外部词库服务器</title>
     <!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css"> -->
-     <link rel="stylesheet" href="../../../renderer/remixicon-local.css" />
+     <link rel="stylesheet" href="./remixicon-local.css" />
     <style>
       :root { color-scheme: dark; }
       body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif; background:#121212; color:#e6e6e6; }
@@ -34,6 +34,10 @@
       .sugg-item:hover { background:#262626; }
       .pos-list { display:flex; flex-wrap: wrap; gap:8px; margin-top:8px; }
       .pos-chip { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; background:#1b1b1b; border:1px solid #2c2c2c; border-radius:999px; }
+      .chip { padding:6px 10px; border-radius:999px; }
+      .chip.active { background:#243a4a; border-color:#2f4d61; color:#d8ecff; }
+      .cell-word, .cell-cn { cursor: pointer; }
+      .cell-word:hover, .cell-cn:hover { background:#232323; }
       /* 进入页面时的密钥输入弹层 */
       .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:none; place-items:center; z-index:100; }
       .modal { width: 360px; max-width: 90vw; background:#1f1f1f; border:1px solid #2c2c2c; border-radius:10px; padding:14px; box-shadow:0 8px 24px rgba(0,0,0,0.45); }
@@ -90,6 +94,8 @@
       <section class="card" style="margin-top:14px;">
         <b><i class="ri-article-line"></i> 词库列表</b>
         <div style="margin-top:8px;">
+          <div id="dateBar" class="row" style="gap:8px; overflow-x:auto;"></div>
+          <div class="muted" style="margin:6px 0;">提示：点击“单词/汉语”单元格可编辑，回车提交，Esc取消</div>
           <table>
             <thead><tr><th>单词</th><th>汉语</th><th>时间</th><th>操作</th></tr></thead>
             <tbody id="tbody"></tbody>
@@ -102,20 +108,51 @@
       async function refreshHealth() {
         try { const r = await fetch('/health'); const j = await r.json(); document.getElementById('health').textContent = j.ok ? '服务器正常运行' : '异常'; } catch { document.getElementById('health').textContent = '无法连接'; }
       }
+      let all = []; let selectedDate = 'ALL';
+      function dateStr(ms) {
+        try {
+          const d = new Date(ms||Date.now());
+          const parts = new Intl.DateTimeFormat('zh-CN', { hour12:false, year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(d);
+          const get = (t) => parts.find(p=>p.type===t)?.value || '';
+          return `${get('year')}-${get('month')}-${get('day')}`;
+        } catch { const d = new Date(ms||Date.now()); const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const dd=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; }
+      }
+      function fmtFull(ms) {
+        try {
+          const d = new Date(ms||Date.now());
+          const parts = new Intl.DateTimeFormat('zh-CN', { hour12:false, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' }).formatToParts(d);
+          const get = (t) => parts.find(p=>p.type===t)?.value || '';
+          return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`;
+        } catch { return new Date(ms||Date.now()).toLocaleString(); }
+      }
+      function renderDates() {
+        const bar = document.getElementById('dateBar');
+        const uniq = Array.from(new Set(all.map(x=>dateStr(x.createdAt)))).sort((a,b)=>b.localeCompare(a));
+        const chips = [`<button class="chip${selectedDate==='ALL' ? ' active' : ''}" data-date="ALL">全部</button>`].concat(
+          uniq.map(d=>`<button class="chip${selectedDate===d ? ' active' : ''}" data-date="${d}">${d}</button>`)
+        );
+        bar.innerHTML = chips.join('');
+      }
+      function renderList() {
+        const items = [...all].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+        const filtered = selectedDate==='ALL' ? items : items.filter(x=>dateStr(x.createdAt)===selectedDate);
+        const tbody = document.getElementById('tbody');
+        tbody.innerHTML = filtered.map(w => {
+          const pairs = Array.isArray(w.translations) ? w.translations.map(it => (it.pos ? (it.pos + '. ' + (it.cn||'')) : (it.cn||''))).filter(Boolean) : [];
+          const cnText = pairs.length ? pairs.join('；') : (w.cn || '');
+          return `<tr data-id="${w.id||''}">
+            <td class="cell-word" title="点击编辑">${w.word}</td>
+            <td class="cell-cn" title="点击编辑">${cnText}</td>
+            <td>${fmtFull(w.createdAt)}</td>
+            <td><button data-id="${w.id||''}" data-word="${w.word}"><i class='ri-delete-bin-line'></i></button></td>
+          </tr>`;
+        }).join('');
+      }
       async function loadWords() {
         try {
           const r = await fetch('/words'); const j = await r.json();
-          const list = Array.isArray(j.words) ? j.words : [];
-          document.getElementById('tbody').innerHTML = list.map(w => {
-            const pairs = Array.isArray(w.translations) ? w.translations.map(it => (it.pos ? (it.pos + '. ' + (it.cn||'')) : (it.cn||''))).filter(Boolean) : [];
-            const cnText = pairs.length ? pairs.join('；') : (w.cn || '');
-            return `<tr>
-              <td>${w.word}</td>
-              <td>${cnText}</td>
-              <td>${new Date(w.createdAt||Date.now()).toLocaleString()}</td>
-              <td><button data-id="${w.id||''}" data-word="${w.word}"><i class='ri-delete-bin-line'></i> 删除</button></td>
-            </tr>`;
-          }).join('');
+          all = Array.isArray(j.words) ? j.words : [];
+          renderDates(); renderList();
         } catch { document.getElementById('tbody').innerHTML = '<tr><td colspan="4">加载失败</td></tr>'; }
       }
       function debounce(fn, wait) { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); }; }
@@ -337,6 +374,32 @@
           await fetch('/words', { method:'DELETE', headers:{'Content-Type':'application/json', 'x-edit-key': getEditKey()}, body: JSON.stringify(payload) });
           await loadWords();
         } catch {}
+      });
+      document.getElementById('dateBar').addEventListener('click', (ev) => {
+        const chip = ev.target.closest('.chip');
+        if (!chip) return;
+        selectedDate = chip.getAttribute('data-date') || 'ALL';
+        renderDates(); renderList();
+      });
+      document.getElementById('tbody').addEventListener('click', async (ev) => {
+        const td = ev.target.closest('.cell-word,.cell-cn'); if (!td) return;
+        const tr = td.closest('tr'); const id = tr?.getAttribute('data-id') || '';
+        const isWord = td.classList.contains('cell-word');
+        const prev = td.textContent || '';
+        const input = document.createElement('input'); input.value = prev; input.style.cssText = 'width:100%;';
+        td.innerHTML = ''; td.appendChild(input); input.focus();
+        const commit = async () => {
+          const next = input.value.trim();
+          if (next === prev) { td.textContent = prev; return; }
+          try {
+            const body = isWord ? { id, word: next } : { id, cn: next };
+            const r = await fetch('/words', { method:'PUT', headers:{'Content-Type':'application/json', 'x-edit-key': getEditKey()}, body: JSON.stringify(body) });
+            const j = await r.json();
+            if (j && j.ok) { await loadWords(); } else { td.textContent = prev; }
+          } catch { td.textContent = prev; }
+        };
+        input.addEventListener('keydown', (e)=>{ if (e.key==='Enter') { e.preventDefault(); commit(); } else if (e.key==='Escape') { td.textContent = prev; } });
+        input.addEventListener('blur', commit);
       });
       refreshHealth();
       loadWords();

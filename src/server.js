@@ -67,6 +67,38 @@ app.delete('/words', requireEditKey, (req, res) => {
   res.json({ ok: true, removed });
 });
 
+// 更新词汇（按ID优先；若无ID则按单词更新一条，优先最新；不修改 createdAt）
+app.put('/words', requireEditKey, (req, res) => {
+  const { id, word, cn, translations } = req.body || {};
+  const data = readWords();
+  let targetIndex = -1;
+  const idStr = String(id || '').trim();
+  if (idStr) {
+    targetIndex = data.words.findIndex((w) => String(w.id || '') === idStr);
+  } else {
+    const normWord = String(word || '').trim();
+    if (normWord) {
+      const candidates = data.words.map((w, i) => ({ w, i })).filter((x) => String(x.w.word || '') === normWord);
+      if (candidates.length) {
+        candidates.sort((a, b) => (b.w.createdAt || 0) - (a.w.createdAt || 0));
+        targetIndex = candidates[0].i;
+      }
+    }
+  }
+  if (targetIndex < 0) return res.status(404).json({ ok: false, error: 'not found' });
+  const cur = data.words[targetIndex] || {};
+  const next = { ...cur };
+  if (typeof word === 'string') next.word = String(word).trim();
+  if (typeof cn === 'string') next.cn = String(cn).trim();
+  if (Array.isArray(translations)) {
+    next.translations = translations.map((t) => ({ pos: String(t?.pos || '').trim(), cn: String(t?.cn || t?.tran_cn || '').trim() })).filter((x) => x.cn);
+  }
+  next.createdAt = cur.createdAt;
+  data.words[targetIndex] = next;
+  writeWords(data);
+  res.json({ ok: true, item: next });
+});
+
 const port = process.env.PORT || 6100;
 app.listen(port, () => console.log(`[wordbank-server] listening on :${port}`));
 // 简单编辑密钥（仅用于编辑操作：添加、删除）
