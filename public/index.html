@@ -106,7 +106,7 @@
 
     <script>
       async function refreshHealth() {
-        try { const r = await fetch('/health'); const j = await r.json(); document.getElementById('health').textContent = j.ok ? '服务器正常运行' : '异常'; } catch { document.getElementById('health').textContent = '无法连接'; }
+        try { const r = await fetch('/health'); const j = await r.json(); document.getElementById('health').textContent = j.ok ? '服务器正常运行' : '异常'; } catch (e) { document.getElementById('health').textContent = '无法连接'; }
       }
       let all = []; let selectedDate = 'ALL';
       function dateStr(ms) {
@@ -115,7 +115,7 @@
           const parts = new Intl.DateTimeFormat('zh-CN', { hour12:false, year:'numeric', month:'2-digit', day:'2-digit' }).formatToParts(d);
           const get = (t) => parts.find(p=>p.type===t)?.value || '';
           return `${get('year')}-${get('month')}-${get('day')}`;
-        } catch { const d = new Date(ms||Date.now()); const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const dd=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; }
+        } catch (e) { const d = new Date(ms||Date.now()); const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const dd=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; }
       }
       function fmtFull(ms) {
         try {
@@ -123,7 +123,7 @@
           const parts = new Intl.DateTimeFormat('zh-CN', { hour12:false, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' }).formatToParts(d);
           const get = (t) => parts.find(p=>p.type===t)?.value || '';
           return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`;
-        } catch { return new Date(ms||Date.now()).toLocaleString(); }
+        } catch (e) { return new Date(ms||Date.now()).toLocaleString(); }
       }
       function renderDates() {
         const bar = document.getElementById('dateBar');
@@ -153,7 +153,7 @@
           const r = await fetch('/words'); const j = await r.json();
           all = Array.isArray(j.words) ? j.words : [];
           renderDates(); renderList();
-        } catch { document.getElementById('tbody').innerHTML = '<tr><td colspan="4">加载失败</td></tr>'; }
+        } catch (e) { document.getElementById('tbody').innerHTML = '<tr><td colspan="4">加载失败</td></tr>'; }
       }
       function debounce(fn, wait) { let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); }; }
       let suggItems = [];
@@ -182,7 +182,7 @@
           suggItems = top;
           suggActive = -1;
           renderSuggest(suggItems);
-        } catch { document.getElementById('suggestions').style.display = 'none'; }
+        } catch (e) { document.getElementById('suggestions').style.display = 'none'; }
       }
       function parseDict(remote) {
         const out = [];
@@ -208,7 +208,7 @@
           // 单字段兼容
           else if (typeof remote?.translation === 'string') push('释义', remote.translation);
           else if (Array.isArray(remote?.translation)) push('释义', remote.translation.join('；'));
-        } catch {}
+        } catch (e) {}
         // 不再强制加入“未解析到词典数据”，由 UI 层展示提示
         return out;
       }
@@ -218,7 +218,7 @@
         try {
           const api = new URL('https://v2.xxapi.cn/api/englishwords'); api.searchParams.set('word', word);
           const r = await fetch(api); let remote = null;
-          try { remote = await r.json(); } catch { remote = { raw: await r.text() }; }
+          try { remote = await r.json(); } catch (e) { remote = { raw: await r.text() }; }
           const items = parseDict(remote);
           if (!items.length) { box.innerHTML = '<div class="muted">未找到词典释义</div>'; }
           else {
@@ -229,7 +229,7 @@
           }
           document.getElementById('dictBox').style.display = '';
           document.getElementById('suggestions').style.display = 'none';
-        } catch { /* ignore */ }
+        } catch (e) { /* ignore */ }
       }
       function getEditKey() { return localStorage.getItem('wordbank.editKey') || ''; }
       function showKeyOverlayIfNeeded() {
@@ -373,7 +373,7 @@
         try {
           await fetch('/words', { method:'DELETE', headers:{'Content-Type':'application/json', 'x-edit-key': getEditKey()}, body: JSON.stringify(payload) });
           await loadWords();
-        } catch {}
+        } catch (e) {}
       });
       document.getElementById('dateBar').addEventListener('click', (ev) => {
         const chip = ev.target.closest('.chip');
@@ -396,7 +396,7 @@
             const r = await fetch('/words', { method:'PUT', headers:{'Content-Type':'application/json', 'x-edit-key': getEditKey()}, body: JSON.stringify(body) });
             const j = await r.json();
             if (j && j.ok) { await loadWords(); } else { td.textContent = prev; }
-          } catch { td.textContent = prev; }
+          } catch (e) { td.textContent = prev; }
         };
         input.addEventListener('keydown', (e)=>{ if (e.key==='Enter') { e.preventDefault(); commit(); } else if (e.key==='Escape') { td.textContent = prev; } });
         input.addEventListener('blur', commit);

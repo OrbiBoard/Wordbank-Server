@@ -12,15 +12,15 @@ app.use(bodyParser.json());
 // 静态前端
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pubDir = path.join(__dirname, '..', 'public');
-try { app.use(express.static(pubDir)); } catch {}
+try { app.use(express.static(pubDir)); } catch (e) {}
 
 const dataDir = path.resolve(process.cwd(), 'wordbank-server', 'data');
 const wordsFile = path.join(dataDir, 'words.json');
 fs.mkdirSync(dataDir, { recursive: true });
 if (!fs.existsSync(wordsFile)) fs.writeFileSync(wordsFile, JSON.stringify({ words: [] }, null, 2));
 
-const readWords = () => { try { return JSON.parse(fs.readFileSync(wordsFile, 'utf-8')); } catch { return { words: [] }; } };
-const writeWords = (data) => { try { fs.writeFileSync(wordsFile, JSON.stringify(data, null, 2)); return true; } catch { return false; } };
+const readWords = () => { try { return JSON.parse(fs.readFileSync(wordsFile, 'utf-8')); } catch (e) { return { words: [] }; } };
+const writeWords = (data) => { try { fs.writeFileSync(wordsFile, JSON.stringify(data, null, 2)); return true; } catch (e) { return false; } };
 
 // 健康检查
 app.get('/health', (_req, res) => res.json({ ok: true }));
